@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Podcast • Site + Painel</title>
+  <link rel="stylesheet" href="./style.css"/>
+</head>
+<body>
+
+  <!-- Animated background -->
+  <div class="bg-orb orb-1"></div>
+  <div class="bg-orb orb-2"></div>
+  <div class="bg-grid"></div>
+
+  <!-- PUBLIC SITE -->
+  <section id="publicView" class="view public">
+    <header class="public-top">
+      <div class="public-brand">
+        <div class="mini-logo">
+          <span class="dot"></span>
+          <span class="ring"></span>
+        </div>
+        <div>
+          <strong id="podName">Seu Podcast</strong>
+          <div class="muted" id="podTagline">O podcast mais brabo da sua cidade.</div>
+        </div>
+      </div>
+
+      <nav class="public-nav">
+        <a href="#inicio" class="navlink">Início</a>
+        <a href="#episodios" class="navlink">Episódios</a>
+        <a href="#convidados" class="navlink">Convidados</a>
+        <a href="#contato" class="navlink">Contato</a>
+        <button id="openLoginBtn" class="btn ghost smallbtn">Painel</button>
+      </nav>
+    </header>
+
+    <main class="public-main">
+      <section id="inicio" class="hero">
+        <div class="hero-left">
+          <div class="hero-kicker">🎙️ Podcast</div>
+          <h1 class="hero-title">
+            Conte histórias, faça cortes, cresça seu canal.
+          </h1>
+          <p class="hero-sub">
+            Um site público moderno para o seu podcast + um painel privado completo para gerenciar convidados,
+            episódios e o financeiro.
+          </p>
+
+          <div class="hero-actions">
+            <a class="btn primary" href="#episodios">Ver episódios</a>
+            <button class="btn ghost" id="ctaAdmin">Abrir painel</button>
+          </div>
+
+          <div class="hero-stats">
+            <div class="statbox">
+              <div class="label">Episódios</div>
+              <div class="value" id="pubStatEps">0</div>
+            </div>
+            <div class="statbox">
+              <div class="label">Convidados</div>
+              <div class="value" id="pubStatGuests">0</div>
+            </div>
+            <div class="statbox">
+              <div class="label">Último episódio</div>
+              <div class="value small" id="pubStatLast">—</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="hero-right">
+          <div class="hero-card">
+            <div class="hero-card-head">
+              <span class="chip">Destaque</span>
+              <span class="chip chip2">Novo</span>
+            </div>
+            <div class="hero-card-title" id="featuredTitle">Episódio em destaque</div>
+            <div class="hero-card-meta" id="featuredMeta">—</div>
+            <div class="hero-card-actions">
+              <a class="btn ghost" id="featuredLink" href="#" target="_blank" rel="noopener">Abrir</a>
+              <a class="btn primary" href="#episodios">Ver todos</a>
+            </div>
+          </div>
+
+          <div class="floating">
+            <div class="pill">Dark</div>
+            <div class="pill">Orange</div>
+            <div class="pill">Premium</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="episodios" class="public-section">
+        <div class="section-head">
+          <h2>🎬 Episódios</h2>
+          <div class="muted">Últimos publicados e lista completa.</div>
+        </div>
+
+        <div class="public-toolbar">
+          <input id="pubEpisodeSearch" class="search" type="text" placeholder="Pesquisar episódio..." />
+          <select id="pubEpisodeFilter">
+            <option value="publicado">Publicados</option>
+            <option value="todos">Todos</option>
+            <option value="planejado">Planejados</option>
+            <option value="gravado">Gravados</option>
+          </select>
+        </div>
+
+        <div id="publicEpisodes" class="cards"></div>
+      </section>
+
+      <section id="convidados" class="public-section">
+        <div class="section-head">
+          <h2>🎙️ Convidados</h2>
+          <div class="muted">Pessoas que já participaram (ou vão participar).</div>
+        </div>
+
+        <div class="public-toolbar">
+          <input id="pubGuestSearch" class="search" type="text" placeholder="Pesquisar convidado..." />
+          <select id="pubGuestFilter">
+            <option value="confirmado">Confirmados</option>
+            <option value="todos">Todos</option>
+            <option value="pendente">Pendentes</option>
+            <option value="recusou">Recusou</option>
+          </select>
+        </div>
+
+        <div id="publicGuests" class="cards"></div>
+      </section>
+
+      <section id="contato" class="public-section">
+        <div class="section-head">
+          <h2>📩 Contato</h2>
+          <div class="muted">Deixe seus links e redes aqui.</div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <h3>Redes</h3>
+            <div class="muted">Configure no painel (Configurações).</div>
+            <div id="publicSocial" class="social"></div>
+          </div>
+
+          <div class="card">
+            <h3>Contato</h3>
+            <div class="muted">E-mail/WhatsApp/Endereço (opcional).</div>
+            <div id="publicContact" class="contact"></div>
+          </div>
+        </div>
+      </section>
+
+      <footer class="public-footer">
+        <span>© <span id="year"></span> <span id="podName2">Seu Podcast</span> • Feito com tema escuro + laranja</span>
+      </footer>
+    </main>
+  </section>
+
+  <!-- LOGIN MODAL -->
+  <div id="loginModal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div class="brand">
+          <div class="logo">
+            <span class="dot"></span>
+            <span class="ring"></span>
+          </div>
+          <div class="brand-text">
+            <h1>Entrar no painel</h1>
+            <p>Área privada do podcast</p>
+          </div>
+        </div>
+        <button id="closeLoginBtn" class="icon-btn">✕</button>
+      </div>
+
+      <div class="divider"></div>
+
+      <form id="loginForm" class="form">
+        <label>
+          Usuário
+          <input id="loginUser" type="text" placeholder="admin" autocomplete="username" required />
+        </label>
+
+        <label>
+          Senha
+          <div class="password-wrap">
+            <input id="loginPass" type="password" placeholder="••••••••" autocomplete="current-password" required />
+            <button type="button" id="togglePass" class="icon-btn" aria-label="Mostrar senha">👁️</button>
+          </div>
+        </label>
+
+        <button class="btn primary" type="submit">
+          Entrar
+          <span class="btn-glow"></span>
+        </button>
+
+        <div id="loginMsg" class="msg" aria-live="polite"></div>
+        <div class="small muted">
+          Login fixo: <strong>admin</strong> • Senha: <strong>pub031103</strong>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- EPISODE DETAILS MODAL -->
+  <div id="detailsModal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div>
+          <strong id="detailsTitle" style="font-size:16px;">Episódio</strong>
+          <div id="detailsMeta" class="muted small" style="margin-top:4px;">—</div>
+        </div>
+        <button id="closeDetailsBtn" class="icon-btn">✕</button>
+      </div>
+
+      <div class="divider"></div>
+
+      <div id="detailsBody" class="details-body"></div>
+
+      <div class="actions" style="margin-top:12px;">
+        <a id="detailsOpenLink" class="btn primary" href="#" target="_blank" rel="noopener">Abrir episódio</a>
+        <button id="detailsClose2" class="btn ghost" type="button">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST -->
+  <div id="toast" class="toast hidden"></div>
+
+
+  <!-- DASHBOARD (ADMIN) -->
+  <section id="appView" class="view hidden admin">
+    <header class="topbar">
+      <div class="topbar-left">
+        <div class="mini-logo">
+          <span class="dot"></span>
+          <span class="ring"></span>
+        </div>
+        <div class="topbar-title">
+          <strong id="adminTitle">Painel do Podcast</strong>
+          <span id="subtitle">Visão geral</span>
+        </div>
+      </div>
+
+      <div class="topbar-right">
+        <button id="exportBtn" class="btn ghost">Exportar JSON</button>
+        <button id="logoutBtn" class="btn danger">Sair</button>
+      </div>
+    </header>
+
+    <div class="layout">
+      <aside class="sidebar">
+        <div class="profile">
+          <div class="avatar">A</div>
+          <div class="profile-text">
+            <div class="name">admin</div>
+            <div class="role">Painel privado</div>
+          </div>
+        </div>
+
+        <nav class="nav">
+          <button class="nav-item active" data-tab="overview">📊 Visão geral</button>
+          <button class="nav-item" data-tab="finance">💰 Financeiro</button>
+          <button class="nav-item" data-tab="guests">🎙️ Convidados</button>
+          <button class="nav-item" data-tab="episodes">🎬 Episódios</button>
+          <button class="nav-item" data-tab="charts">📈 Gráficos</button>
+          <button class="nav-item" data-tab="reports">🧾 Relatórios</button>
+          <button class="nav-item" data-tab="settings">⚙️ Configurações</button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <div class="small">Salvamento automático (LocalStorage)</div>
+        </div>
+      </aside>
+
+      <main class="content">
+
+        <!-- OVERVIEW -->
+        <section class="tab" id="tab-overview">
+          <div class="grid">
+            <div class="card stat">
+              <div class="stat-label">Saldo atual</div>
+              <div class="stat-value" id="statSaldo">R$ 0,00</div>
+              <div class="stat-sub" id="statSaldoSub">Entradas - Saídas</div>
+            </div>
+
+            <div class="card stat">
+              <div class="stat-label">Total entradas</div>
+              <div class="stat-value" id="statEntradas">R$ 0,00</div>
+              <div class="stat-sub">Somatório das entradas</div>
+            </div>
+
+            <div class="card stat">
+              <div class="stat-label">Total saídas</div>
+              <div class="stat-value" id="statSaidas">R$ 0,00</div>
+              <div class="stat-sub">Somatório das saídas</div>
+            </div>
+
+            <div class="card stat">
+              <div class="stat-label">Episódios</div>
+              <div class="stat-value" id="statEpisodios">0</div>
+              <div class="stat-sub">Publicados / planejados</div>
+            </div>
+          </div>
+
+          <div class="grid grid-2">
+            <div class="card">
+              <div class="card-head">
+                <h2>Últimas transações</h2>
+                <div class="chip">Financeiro</div>
+              </div>
+              <div id="lastTransactions" class="list"></div>
+            </div>
+
+            <div class="card">
+              <div class="card-head">
+                <h2>Próximos episódios</h2>
+                <div class="chip">Episódios</div>
+              </div>
+              <div id="nextEpisodes" class="list"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- FINANCE -->
+        <section class="tab hidden" id="tab-finance">
+          <div class="card">
+            <div class="card-head">
+              <h2>Financeiro</h2>
+              <div class="chip">Entradas e saídas</div>
+            </div>
+
+            <form id="financeForm" class="form grid-form">
+              <label>
+                Tipo
+                <select id="fTipo" required>
+                  <option value="entrada">Entrada</option>
+                  <option value="saida">Saída</option>
+                </select>
+              </label>
+
+              <label>
+                Valor (R$)
+                <input id="fValor" type="number" step="0.01" min="0" placeholder="Ex: 150.00" required />
+              </label>
+
+              <label>
+                Categoria
+                <input id="fCategoria" type="text" placeholder="Ex: Patrocínio, Aluguel, Luz..." required />
+              </label>
+
+              <label>
+                Data
+                <input id="fData" type="date" required />
+              </label>
+
+              <label class="span-2">
+                Observação
+                <input id="fObs" type="text" placeholder="Opcional (ex: pagamento do estúdio)"/>
+              </label>
+
+              <div class="span-2 actions">
+                <button class="btn primary" type="submit">Adicionar transação</button>
+                <button class="btn ghost" type="button" id="clearFinanceBtn">Limpar tudo</button>
+              </div>
+            </form>
+          </div>
+
+          <div class="grid grid-2">
+            <div class="card">
+              <div class="card-head">
+                <h2>Lista</h2>
+                <div class="chip">Histórico</div>
+              </div>
+              <div id="financeList" class="list"></div>
+            </div>
+
+            <div class="card">
+              <div class="card-head">
+                <h2>Resumo</h2>
+                <div class="chip">Indicadores</div>
+              </div>
+              <div class="summary">
+                <div class="summary-row">
+                  <span>Entradas</span>
+                  <strong id="sumEntradas">R$ 0,00</strong>
+                </div>
+                <div class="summary-row">
+                  <span>Saídas</span>
+                  <strong id="sumSaidas">R$ 0,00</strong>
+                </div>
+                <div class="summary-row">
+                  <span>Saldo</span>
+                  <strong id="sumSaldo" class="accent">R$ 0,00</strong>
+                </div>
+              </div>
+
+              <div class="mini-note">
+                Dica: agora você já pode EDITAR itens (botão editar em cada linha).
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- GUESTS -->
+        <section class="tab hidden" id="tab-guests">
+          <div class="card">
+            <div class="card-head">
+              <h2>Convidados</h2>
+              <div class="chip">Cadastro</div>
+            </div>
+
+            <form id="guestForm" class="form grid-form">
+              <label>
+                Nome
+                <input id="gNome" type="text" placeholder="Ex: João Silva" required />
+              </label>
+
+              <label>
+                Instagram
+                <input id="gInsta" type="text" placeholder="@perfil" />
+              </label>
+
+              <label class="span-2">
+                Bio
+                <input id="gBio" type="text" placeholder="Breve descrição do convidado..." required />
+              </label>
+
+              <label>
+                Contato
+                <input id="gContato" type="text" placeholder="WhatsApp / Email (opcional)" />
+              </label>
+
+              <label>
+                Status
+                <select id="gStatus">
+                  <option value="confirmado">Confirmado</option>
+                  <option value="pendente">Pendente</option>
+                  <option value="recusou">Recusou</option>
+                </select>
+              </label>
+
+              <label class="span-2">
+                Foto (opcional)
+                <input id="gFoto" type="file" accept="image/*" />
+              </label>
+
+              <div class="span-2 actions">
+                <button class="btn primary" type="submit">Adicionar convidado</button>
+                <button class="btn ghost" type="button" id="clearGuestsBtn">Limpar tudo</button>
+              </div>
+            </form>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <h2>Lista de convidados</h2>
+              <div class="chip">Organização</div>
+            </div>
+
+            <div class="toolbar">
+              <input id="guestSearch" class="search" type="text" placeholder="Pesquisar convidado..." />
+              <select id="guestFilter">
+                <option value="todos">Todos</option>
+                <option value="confirmado">Confirmados</option>
+                <option value="pendente">Pendentes</option>
+                <option value="recusou">Recusou</option>
+              </select>
+              <select id="guestSort">
+                <option value="recent">Mais recentes</option>
+                <option value="name">Nome (A-Z)</option>
+              </select>
+            </div>
+
+            <div id="guestsList" class="list"></div>
+          </div>
+        </section>
+
+        <!-- EPISODES -->
+        <section class="tab hidden" id="tab-episodes">
+          <div class="card">
+            <div class="card-head">
+              <h2>Episódios</h2>
+              <div class="chip">Gerenciamento</div>
+            </div>
+
+            <form id="episodeForm" class="form grid-form">
+              <label>
+                Título
+                <input id="eTitulo" type="text" placeholder="Ex: Bastidores do Podcast" required />
+              </label>
+
+              <label>
+                Convidado (nome)
+                <input id="eConvidado" type="text" placeholder="Opcional" />
+              </label>
+
+              <label>
+                Data
+                <input id="eData" type="date" required />
+              </label>
+
+              <label>
+                Status
+                <select id="eStatus">
+                  <option value="planejado">Planejado</option>
+                  <option value="gravado">Gravado</option>
+                  <option value="publicado">Publicado</option>
+                </select>
+              </label>
+
+              <label class="span-2">
+                Link do episódio (YouTube/Spotify)
+                <input id="eLink" type="url" placeholder="https://..." />
+              </label>
+
+              <label class="span-2">
+                Thumbnail (opcional)
+                <input id="eThumb" type="file" accept="image/*" />
+              </label>
+
+              <label class="span-2">
+                Observações
+                <input id="eObs" type="text" placeholder="Ex: precisa editar áudio, cortar trechos..." />
+              </label>
+
+              <div class="span-2 actions">
+                <button class="btn primary" type="submit">Adicionar episódio</button>
+                <button class="btn ghost" type="button" id="clearEpisodesBtn">Limpar tudo</button>
+              </div>
+            </form>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <h2>Lista de episódios</h2>
+              <div class="chip">Timeline</div>
+            </div>
+
+            <div class="toolbar">
+              <input id="episodeSearch" class="search" type="text" placeholder="Pesquisar episódio..." />
+              <select id="episodeFilter">
+                <option value="todos">Todos</option>
+                <option value="planejado">Planejados</option>
+                <option value="gravado">Gravados</option>
+                <option value="publicado">Publicados</option>
+              </select>
+              <select id="episodeSort">
+                <option value="dateDesc">Data (mais novo)</option>
+                <option value="dateAsc">Data (mais antigo)</option>
+                <option value="title">Título (A-Z)</option>
+              </select>
+            </div>
+
+            <div id="episodesList" class="list"></div>
+          </div>
+        </section>
+
+        <!-- CHARTS -->
+        <section class="tab hidden" id="tab-charts">
+          <div class="card">
+            <div class="card-head">
+              <h2>Gráficos</h2>
+              <div class="chip">Dashboard</div>
+            </div>
+
+            <div class="grid grid-2">
+              <div class="card">
+                <div class="card-head">
+                  <h2>Entradas x Saídas (últimos 6 meses)</h2>
+                  <div class="chip">Financeiro</div>
+                </div>
+                <canvas id="chart6m" height="140"></canvas>
+              </div>
+
+              <div class="card">
+                <div class="card-head">
+                  <h2>Saldo acumulado (últimos 6 meses)</h2>
+                  <div class="chip">Saldo</div>
+                </div>
+                <canvas id="chartSaldo" height="140"></canvas>
+              </div>
+            </div>
+
+            <div class="mini-note">
+              Gráficos feitos em Canvas (sem bibliotecas) pra ficar leve e rápido.
+            </div>
+          </div>
+        </section>
+
+        
+        <!-- REPORTS -->
+        <section class="tab hidden" id="tab-reports">
+          <div class="card">
+            <div class="card-head">
+              <h2>Relatórios</h2>
+              <div class="chip">Exportações</div>
+            </div>
+
+            <div class="grid grid-2">
+              <div class="card">
+                <div class="card-head">
+                  <h2>Exportar (CSV)</h2>
+                  <div class="chip">Excel</div>
+                </div>
+
+                <div class="mini-note">
+                  CSV abre no Excel, Google Sheets e LibreOffice.
+                </div>
+
+                <div class="actions" style="margin-top:12px;">
+                  <button id="csvFinanceBtn" class="btn primary">Financeiro CSV</button>
+                  <button id="csvGuestsBtn" class="btn ghost">Convidados CSV</button>
+                  <button id="csvEpisodesBtn" class="btn ghost">Episódios CSV</button>
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="card-head">
+                  <h2>Filtro rápido</h2>
+                  <div class="chip">Financeiro</div>
+                </div>
+
+                <label>
+                  Mês (AAAA-MM)
+                  <input id="reportMonth" type="month" />
+                </label>
+
+                <div class="actions" style="margin-top:12px;">
+                  <button id="csvMonthBtn" class="btn primary">Exportar mês (CSV)</button>
+                  <button id="csvAllBtn" class="btn ghost">Exportar tudo</button>
+                </div>
+
+                <div class="mini-note">
+                  Dica: use para prestação de contas do podcast.
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+
+        <!-- SETTINGS -->
+        <section class="tab hidden" id="tab-settings">
+          <div class="card">
+            <div class="card-head">
+              <h2>Configurações</h2>
+              <div class="chip">Sistema</div>
+            </div>
+
+            <div class="settings-grid">
+              <div class="setting">
+                <h3>🎙️ Dados do Podcast</h3>
+
+                <label>
+                  Nome do podcast
+                  <input id="sName" type="text" placeholder="Ex: Flow da Cidade" />
+                </label>
+
+                <label>
+                  Slogan / frase
+                  <input id="sTagline" type="text" placeholder="Ex: Conversas reais, sem filtro." />
+                </label>
+
+                <div class="actions">
+                  <button id="saveBrandBtn" class="btn primary">Salvar</button>
+                </div>
+
+                <p class="small muted">
+                  Isso atualiza automaticamente o site público.
+                </p>
+              </div>
+
+              <div class="setting">
+                <h3>🌐 Redes e contato</h3>
+
+                <label>
+                  Instagram
+                  <input id="sInstagram" type="text" placeholder="https://instagram.com/..." />
+                </label>
+
+                <label>
+                  YouTube
+                  <input id="sYoutube" type="text" placeholder="https://youtube.com/..." />
+                </label>
+
+                <label>
+                  Spotify
+                  <input id="sSpotify" type="text" placeholder="https://open.spotify.com/..." />
+                </label>
+
+                <label>
+                  Email
+                  <input id="sEmail" type="email" placeholder="contato@seudominio.com" />
+                </label>
+
+                <label>
+                  WhatsApp
+                  <input id="sWhats" type="text" placeholder="(61) 99999-9999" />
+                </label>
+
+                <div class="actions">
+                  <button id="saveSocialBtn" class="btn primary">Salvar</button>
+                </div>
+              </div>
+
+              <div class="setting">
+                <h3>📦 Backup</h3>
+                <p class="muted">Seus dados ficam salvos no navegador (LocalStorage).</p>
+                <button class="btn ghost" id="importBtn">Importar JSON</button>
+                <input type="file" id="importFile" accept="application/json" hidden />
+                <p class="small muted">
+                  Use também o botão "Exportar JSON" no topo.
+                </p>
+
+                <div class="divider"></div>
+
+                <h3>🧹 Limpar tudo</h3>
+                <p class="muted">Remove convidados, episódios e transações.</p>
+                <button class="btn danger" id="wipeAllBtn">Apagar tudo</button>
+
+                <div class="divider"></div>
+
+                <h3>🔒 Login</h3>
+                <p class="muted">Usuário fixo: <strong>admin</strong></p>
+                <p class="muted">Senha fixa: <strong>pub031103</strong></p>
+                <p class="small muted">
+                  Para segurança real, depois colocamos backend.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </main>
+    </div>
+
+    <footer class="footer">
+      <span>Feito para seu podcast • Site público + Painel admin • v2</span>
+    </footer>
+  </section>
+
+  <script src="./script.js"></script>
+</body>
+</html>
