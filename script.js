@@ -188,7 +188,7 @@ function saveDB(db, options = {}) {
 }
 
 let db = loadDB();
-const cloudSyncInfo = document.getElementById("cloudSyncInfo");
+let cloudSyncInfo = document.getElementById("cloudSyncInfo");
 
 const cloudState = {
   enabled: false,
@@ -199,7 +199,21 @@ const cloudState = {
 };
 
 function setCloudStatus(text) {
+  ensureCloudStatusElement();
   if (cloudSyncInfo) cloudSyncInfo.textContent = text;
+}
+
+function ensureCloudStatusElement() {
+  if (cloudSyncInfo) return cloudSyncInfo;
+  const backupInfoEl = document.getElementById("backupInfo");
+  if (!backupInfoEl || !backupInfoEl.parentElement) return null;
+  const p = document.createElement("p");
+  p.id = "cloudSyncInfo";
+  p.className = "small muted";
+  p.textContent = "Nuvem: inicializando...";
+  backupInfoEl.insertAdjacentElement("afterend", p);
+  cloudSyncInfo = p;
+  return cloudSyncInfo;
 }
 
 async function initCloudSync() {
