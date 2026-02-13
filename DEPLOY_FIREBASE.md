@@ -38,3 +38,29 @@ No `firebase.json`:
 - Arquivos estáticos (`.js`, `.css`, imagens, fontes): cache longo com `immutable`.
 - HTML: sem cache (`no-cache, no-store, must-revalidate`) para publicar mudanças imediatamente.
 
+## 8) Ativar Firestore (salvar dados na nuvem)
+No Firebase Console:
+1. `Build` -> `Firestore Database` -> `Create database`.
+2. Escolha `Production mode` (ou `Test mode` temporariamente).
+3. Escolha uma região (ex: `southamerica-east1`).
+
+## 9) Copiar config Web do Firebase
+No Firebase Console:
+1. `Project settings` -> `General`.
+2. Em `Your apps`, crie um app Web (ícone `</>`), se ainda não existir.
+3. Copie o objeto de config (apiKey, authDomain, projectId, appId...).
+4. Cole no `index.html` em `window.__FIREBASE_CONFIG` (substituindo placeholders).
+
+## 10) Regras mínimas Firestore para este projeto
+Cole em `Firestore Database` -> `Rules`:
+```txt
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /podcast_dashboard/{docId} {
+      allow read, write: if true;
+    }
+  }
+}
+```
+Observação: regra acima é aberta (simples para começar). Depois ajuste para Auth.

@@ -24,6 +24,8 @@ const DB_BACKUP_KEY = "podcast_dashboard_db_backup_v2";
 const DB_BACKUP_LIST_KEY = "podcast_dashboard_db_backup_list_v2";
 const DB_VERSION = 3;
 const MAX_BACKUPS = 5;
+const CLOUD_COLLECTION = "podcast_dashboard";
+const CLOUD_DOC_ID = "main";
 
 const defaultDB = {
   brand: {
@@ -75,6 +77,19 @@ function normalizeDBData(source) {
     convidados: Array.isArray(parsed.convidados) ? parsed.convidados : [],
     episodios: Array.isArray(parsed.episodios) ? parsed.episodios : []
   };
+}
+
+function getFirebaseConfig() {
+  const cfg = window.__FIREBASE_CONFIG || null;
+  if (!cfg) return null;
+  const required = ["apiKey", "authDomain", "projectId", "appId"];
+  const hasAll = required.every((k) => String(cfg[k] || "").trim().length > 0);
+  if (!hasAll) return null;
+  const asText = JSON.stringify(cfg).toLowerCase();
+  if (asText.includes("sua_api_key") || asText.includes("seu_projeto") || asText.includes("seu_app_id")) {
+    return null;
+  }
+  return cfg;
 }
 
 function createPayload(data, label = "auto") {
@@ -142,7 +157,7 @@ function getBackupPayload() {
   }
 }
 
-function saveDB(db, options = {}) {
+function saveDBLocalOnly(db, options = {}) {
   const label = options.label || "auto";
   const payload = createPayload(db, label);
   try {
@@ -150,7 +165,7 @@ function saveDB(db, options = {}) {
     localStorage.setItem(DB_KEY, JSON.stringify(payload));
 
     // Keep the previous valid state as a quick rollback backup.
-    if (previousRaw) setBackupFromRaw(previousRaw, `before_${label}`);
+    if (previousRaw && !options.skipBackup) setBackupFromRaw(previousRaw, `before_${label}`);
     else {
       localStorage.setItem(DB_BACKUP_KEY, JSON.stringify(payload));
       pushBackupPayload(payload);
@@ -166,7 +181,85 @@ function saveDB(db, options = {}) {
   }
 }
 
+function saveDB(db, options = {}) {
+  const ok = saveDBLocalOnly(db, options);
+  if (ok) scheduleCloudSave(db, options.label || "auto");
+  return ok;
+}
+
 let db = loadDB();
+const cloudSyncInfo = document.getElementById("cloudSyncInfo");
+
+const cloudState = {
+  enabled: false,
+  firestore: null,
+  docRef: null,
+  saveTimer: null,
+  pending: null
+};
+
+function setCloudStatus(text) {
+  if (cloudSyncInfo) cloudSyncInfo.textContent = text;
+}
+
+async function initCloudSync() {
+  try {
+    const cfg = getFirebaseConfig();
+    if (!cfg || !window.firebase) {
+      setCloudStatus("Nuvem: não configurada.");
+      return false;
+    }
+
+    if (!firebase.apps?.length) firebase.initializeApp(cfg);
+    cloudState.firestore = firebase.firestore();
+    cloudState.docRef = cloudState.firestore.collection(CLOUD_COLLECTION).doc(CLOUD_DOC_ID);
+    cloudState.enabled = true;
+    setCloudStatus("Nuvem: conectando...");
+
+    const snap = await cloudState.docRef.get();
+    if (!snap.exists) {
+      await pushDBToCloud(db, "bootstrap_cloud");
+      setCloudStatus("Nuvem: ativa (primeiro sync concluído).");
+      return true;
+    }
+
+    const cloudPayload = snap.data() || {};
+    if (cloudPayload?.data) {
+      db = normalizeDBData(cloudPayload.data);
+      saveDBLocalOnly(db, { label: "cloud_pull", skipBackup: false });
+    }
+
+    setCloudStatus("Nuvem: ativa e sincronizada.");
+    return true;
+  } catch (err) {
+    setCloudStatus("Nuvem: erro de conexão (modo local ativo).");
+    return false;
+  }
+}
+
+async function pushDBToCloud(data, label = "auto") {
+  if (!cloudState.enabled || !cloudState.docRef) return;
+  const payload = createPayload(data, label);
+  payload.updatedBy = "web_client";
+  await cloudState.docRef.set(payload, { merge: true });
+}
+
+function scheduleCloudSave(data, label = "auto") {
+  if (!cloudState.enabled) return;
+  cloudState.pending = { data: normalizeDBData(data), label };
+  clearTimeout(cloudState.saveTimer);
+  cloudState.saveTimer = setTimeout(async () => {
+    if (!cloudState.pending) return;
+    const job = cloudState.pending;
+    cloudState.pending = null;
+    try {
+      await pushDBToCloud(job.data, job.label);
+      setCloudStatus("Nuvem: sincronizada.");
+    } catch {
+      setCloudStatus("Nuvem: erro no sync (dados locais preservados).");
+    }
+  }, 900);
+}
 
 // ----------- HELPERS -----------
 const brl = (n) =>
@@ -2126,10 +2219,11 @@ function initAdmin() {
   refreshAll();
 }
 
-(function boot() {
+(async function boot() {
   document.getElementById("year").textContent = String(new Date().getFullYear());
   ensureBackupInitialized();
   initDynamicFX();
+  await initCloudSync();
 
   if (isLogged()) {
     showAdmin();
