@@ -20,11 +20,15 @@ const SESSION_KEY = "podcast_session_ok";
 
 // ----------- STORAGE -----------
 const DB_KEY = "podcast_dashboard_db_v2";
+const DB_BACKUP_KEY = "podcast_dashboard_db_backup_v2";
+const DB_BACKUP_LIST_KEY = "podcast_dashboard_db_backup_list_v2";
+const DB_VERSION = 3;
+const MAX_BACKUPS = 5;
 
 const defaultDB = {
   brand: {
     name: "Seu Podcast",
-    tagline: "O podcast mais brabo da sua cidade.",
+    tagline: "Conversas reais, sem filtro.",
     social: {
       instagram: "",
       youtube: "",
@@ -43,33 +47,123 @@ function loadDB() {
     const raw = localStorage.getItem(DB_KEY);
     if (!raw) return structuredClone(defaultDB);
     const parsed = JSON.parse(raw);
-
-    const brand = parsed.brand || defaultDB.brand;
-    const social = (brand.social || defaultDB.brand.social);
-
-    return {
-      brand: {
-        name: brand.name || defaultDB.brand.name,
-        tagline: brand.tagline || defaultDB.brand.tagline,
-        social: {
-          instagram: social.instagram || "",
-          youtube: social.youtube || "",
-          spotify: social.spotify || "",
-          email: social.email || "",
-          whatsapp: social.whatsapp || ""
-        }
-      },
-      transacoes: Array.isArray(parsed.transacoes) ? parsed.transacoes : [],
-      convidados: Array.isArray(parsed.convidados) ? parsed.convidados : [],
-      episodios: Array.isArray(parsed.episodios) ? parsed.episodios : []
-    };
+    const data = parsed?.data ? parsed.data : parsed;
+    return normalizeDBData(data);
   } catch (e) {
     return structuredClone(defaultDB);
   }
 }
 
-function saveDB(db) {
-  localStorage.setItem(DB_KEY, JSON.stringify(db));
+function normalizeDBData(source) {
+  const parsed = source || {};
+  const brand = parsed.brand || defaultDB.brand;
+  const social = brand.social || defaultDB.brand.social;
+
+  return {
+    brand: {
+      name: String(brand.name || defaultDB.brand.name),
+      tagline: String(brand.tagline || defaultDB.brand.tagline),
+      social: {
+        instagram: String(social.instagram || ""),
+        youtube: String(social.youtube || ""),
+        spotify: String(social.spotify || ""),
+        email: String(social.email || ""),
+        whatsapp: String(social.whatsapp || "")
+      }
+    },
+    transacoes: Array.isArray(parsed.transacoes) ? parsed.transacoes : [],
+    convidados: Array.isArray(parsed.convidados) ? parsed.convidados : [],
+    episodios: Array.isArray(parsed.episodios) ? parsed.episodios : []
+  };
+}
+
+function createPayload(data, label = "auto") {
+  return {
+    version: DB_VERSION,
+    label,
+    savedAt: new Date().toISOString(),
+    data: normalizeDBData(data)
+  };
+}
+
+function setBackupFromRaw(raw, label = "auto") {
+  if (!raw) return;
+  try {
+    const parsed = JSON.parse(raw);
+    const data = parsed?.data ? parsed.data : parsed;
+    const payload = createPayload(data, label);
+    localStorage.setItem(DB_BACKUP_KEY, JSON.stringify(payload));
+    pushBackupPayload(payload);
+  } catch {
+    // Ignore malformed backup source.
+  }
+}
+
+function getBackupList() {
+  try {
+    const raw = localStorage.getItem(DB_BACKUP_LIST_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((x) => x && x.data && x.savedAt);
+  } catch {
+    return [];
+  }
+}
+
+function saveBackupList(list) {
+  localStorage.setItem(DB_BACKUP_LIST_KEY, JSON.stringify(list.slice(0, MAX_BACKUPS)));
+}
+
+function pushBackupPayload(payload) {
+  if (!payload?.data || !payload?.savedAt) return;
+  try {
+    const list = getBackupList();
+    const key = `${payload.savedAt}_${payload.label || ""}`;
+    const deduped = list.filter((x) => `${x.savedAt}_${x.label || ""}` !== key);
+    deduped.unshift(payload);
+    saveBackupList(deduped);
+  } catch {
+    // Keep primary save flow alive even if backup history write fails.
+  }
+}
+
+function getBackupPayload() {
+  const list = getBackupList();
+  if (list.length > 0) return list[0];
+  try {
+    const raw = localStorage.getItem(DB_BACKUP_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.data) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function saveDB(db, options = {}) {
+  const label = options.label || "auto";
+  const payload = createPayload(db, label);
+  try {
+    const previousRaw = localStorage.getItem(DB_KEY);
+    localStorage.setItem(DB_KEY, JSON.stringify(payload));
+
+    // Keep the previous valid state as a quick rollback backup.
+    if (previousRaw) setBackupFromRaw(previousRaw, `before_${label}`);
+    else {
+      localStorage.setItem(DB_BACKUP_KEY, JSON.stringify(payload));
+      pushBackupPayload(payload);
+    }
+    return true;
+  } catch (err) {
+    if (err && (err.name === "QuotaExceededError" || err.code === 22)) {
+      toast("Sem espaço no navegador para salvar. Exporte backup e limpe dados antigos.", "err");
+    } else {
+      toast("Falha ao salvar os dados no navegador.", "err");
+    }
+    return false;
+  }
 }
 
 let db = loadDB();
@@ -91,6 +185,46 @@ function safeText(s) {
   return String(s ?? "").replace(/[<>]/g, "");
 }
 
+function isValidUrl(value) {
+  try {
+    const u = new URL(String(value));
+    return u.protocol === "https:" || u.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+function normalizeUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (isValidUrl(raw)) return raw;
+  if (raw.startsWith("www.")) return `https://${raw}`;
+  return raw;
+}
+
+function formatDateBR(iso) {
+  const raw = String(iso || "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw || "—";
+  const [y, m, d] = raw.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+function getEmbeddableLink(url) {
+  const raw = String(url || "").trim();
+  if (!isValidUrl(raw)) return "";
+
+  // youtube.com/watch?v=... | youtu.be/... -> youtube embed
+  const ytWatch = raw.match(/[?&]v=([^&]+)/);
+  if (raw.includes("youtube.com/watch") && ytWatch?.[1]) {
+    return `https://www.youtube.com/embed/${ytWatch[1]}`;
+  }
+  const ytShort = raw.match(/youtu\.be\/([^?&/]+)/);
+  if (ytShort?.[1]) {
+    return `https://www.youtube.com/embed/${ytShort[1]}`;
+  }
+  return "";
+}
+
 function toast(msg, type="ok"){
   const t = document.getElementById("toast");
   if (!t) return;
@@ -102,6 +236,42 @@ function toast(msg, type="ok"){
     t.classList.add("hidden");
   }, 2200);
 }
+
+// ----------- CONFIRM MODAL -----------
+const confirmModal = document.getElementById("confirmModal");
+const confirmMessage = document.getElementById("confirmMessage");
+const confirmDetail = document.getElementById("confirmDetail");
+const confirmOkBtn = document.getElementById("confirmOkBtn");
+const confirmCancelBtn = document.getElementById("confirmCancelBtn");
+let confirmResolver = null;
+
+function closeConfirmModal(result = false) {
+  if (confirmModal) confirmModal.classList.add("hidden");
+  if (confirmResolver) {
+    confirmResolver(result);
+    confirmResolver = null;
+  }
+}
+
+function confirmAction(message, detail = "Essa ação pode alterar seus dados.") {
+  if (!confirmModal || !confirmMessage || !confirmDetail || !confirmOkBtn || !confirmCancelBtn) {
+    return Promise.resolve(window.confirm(message));
+  }
+
+  confirmMessage.textContent = message;
+  confirmDetail.textContent = detail;
+  confirmModal.classList.remove("hidden");
+
+  return new Promise((resolve) => {
+    confirmResolver = resolve;
+  });
+}
+
+confirmOkBtn?.addEventListener("click", () => closeConfirmModal(true));
+confirmCancelBtn?.addEventListener("click", () => closeConfirmModal(false));
+confirmModal?.addEventListener("click", (e) => {
+  if (e.target === confirmModal) closeConfirmModal(false);
+});
 
 
 function byDateStr(a, b) {
@@ -270,20 +440,23 @@ document.getElementById("logoutBtn")?.addEventListener("click", () => {
 // ----------- EXPORT / IMPORT / WIPE -----------
 document.getElementById("exportBtn")?.addEventListener("click", () => {
   const payload = {
-    version: 2,
-    exportedAt: new Date().toISOString(),
-    data: db
+    ...createPayload(db, "manual_export"),
+    exportedAt: new Date().toISOString()
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "backup_podcast_dashboard_v2.json";
+  a.download = "backup_podcast_dashboard_v3.json";
   a.click();
   URL.revokeObjectURL(a.href);
 });
 
 const importBtn = document.getElementById("importBtn");
 const importFile = document.getElementById("importFile");
+const restoreBackupBtn = document.getElementById("restoreBackupBtn");
+const clearBackupHistoryBtn = document.getElementById("clearBackupHistoryBtn");
+const backupInfo = document.getElementById("backupInfo");
+const backupHistory = document.getElementById("backupHistory");
 
 importBtn?.addEventListener("click", () => importFile?.click());
 
@@ -294,18 +467,11 @@ importFile?.addEventListener("change", async (e) => {
   try {
     const text = await file.text();
     const json = JSON.parse(text);
-    if (!json?.data) throw new Error("Formato inválido");
+    const sourceData = json?.data ? json.data : json;
+    if (!sourceData || typeof sourceData !== "object") throw new Error("Formato inválido");
 
-    const d = json.data;
-
-    db = {
-      brand: d.brand || defaultDB.brand,
-      transacoes: Array.isArray(d.transacoes) ? d.transacoes : [],
-      convidados: Array.isArray(d.convidados) ? d.convidados : [],
-      episodios: Array.isArray(d.episodios) ? d.episodios : []
-    };
-
-    saveDB(db);
+    db = normalizeDBData(sourceData);
+    saveDB(db, { label: "import" });
     refreshAll();
     toast("Importado com sucesso!", "ok");
   } catch (err) {
@@ -315,8 +481,73 @@ importFile?.addEventListener("change", async (e) => {
   }
 });
 
-document.getElementById("wipeAllBtn")?.addEventListener("click", () => {
-  const ok = confirm("Tem certeza? Isso vai apagar convidados, episódios e transações.");
+restoreBackupBtn?.addEventListener("click", async () => {
+  const backup = getBackupPayload();
+  if (!backup?.data) {
+    toast("Nenhum backup local disponível para restaurar.", "warn");
+    return;
+  }
+
+  const ok = await confirmAction(
+    "Restaurar último backup local?",
+    "Os dados atuais serão substituídos pelos dados do backup."
+  );
+  if (!ok) return;
+
+  db = normalizeDBData(backup.data);
+  saveDB(db, { label: "restore_backup" });
+  refreshAll();
+  toast("Backup restaurado com sucesso!", "ok");
+});
+
+clearBackupHistoryBtn?.addEventListener("click", async () => {
+  const list = getBackupList();
+  if (list.length === 0) {
+    toast("Histórico de backups já está vazio.", "warn");
+    return;
+  }
+  const ok = await confirmAction(
+    "Limpar histórico de backups locais?",
+    "Você manterá apenas o estado atual salvo."
+  );
+  if (!ok) return;
+
+  const payload = createPayload(db, "snapshot_after_clear");
+  localStorage.setItem(DB_BACKUP_KEY, JSON.stringify(payload));
+  saveBackupList([payload]);
+  updateBackupInfo();
+  toast("Histórico de backups limpo.", "ok");
+});
+
+backupHistory?.addEventListener("click", async (ev) => {
+  const target = ev.target;
+  if (!(target instanceof HTMLElement)) return;
+  const btn = target.closest("[data-backup-idx]");
+  if (!btn) return;
+
+  const idx = Number(btn.getAttribute("data-backup-idx"));
+  if (!Number.isInteger(idx)) return;
+  const list = getBackupList();
+  const item = list[idx];
+  if (!item?.data) return;
+
+  const ok = await confirmAction(
+    "Restaurar este backup?",
+    "Os dados atuais serão substituídos pelo backup selecionado."
+  );
+  if (!ok) return;
+
+  db = normalizeDBData(item.data);
+  saveDB(db, { label: `restore_history_${idx}` });
+  refreshAll();
+  toast("Backup restaurado do histórico!", "ok");
+});
+
+document.getElementById("wipeAllBtn")?.addEventListener("click", async () => {
+  const ok = await confirmAction(
+    "Tem certeza? Isso vai apagar convidados, episódios e transações.",
+    "Essa ação é irreversível."
+  );
   if (!ok) return;
   db = structuredClone(defaultDB);
   saveDB(db);
@@ -331,8 +562,11 @@ const financeForm = document.getElementById("financeForm");
 const financeList = document.getElementById("financeList");
 const lastTransactions = document.getElementById("lastTransactions");
 
-document.getElementById("clearFinanceBtn")?.addEventListener("click", () => {
-  const ok = confirm("Apagar TODAS as transações?");
+document.getElementById("clearFinanceBtn")?.addEventListener("click", async () => {
+  const ok = await confirmAction(
+    "Apagar TODAS as transações?",
+    "Você perderá o histórico financeiro salvo."
+  );
   if (!ok) return;
   db.transacoes = [];
   saveDB(db);
@@ -348,7 +582,10 @@ financeForm?.addEventListener("submit", (e) => {
   const data = document.getElementById("fData").value;
   const obs = document.getElementById("fObs").value.trim();
 
-  if (!tipo || !categoria || !data || !(valor > 0)) return;
+  if (!tipo || categoria.length < 2 || !data || !(valor > 0)) {
+    toast("Preencha categoria, data e valor válidos.", "warn");
+    return;
+  }
 
   db.transacoes.unshift({
     id: uid("t"),
@@ -375,8 +612,11 @@ const guestSearch = document.getElementById("guestSearch");
 const guestFilter = document.getElementById("guestFilter");
 const guestSort = document.getElementById("guestSort");
 
-document.getElementById("clearGuestsBtn")?.addEventListener("click", () => {
-  const ok = confirm("Apagar TODOS os convidados?");
+document.getElementById("clearGuestsBtn")?.addEventListener("click", async () => {
+  const ok = await confirmAction(
+    "Apagar TODOS os convidados?",
+    "Todos os convidados cadastrados serão removidos."
+  );
   if (!ok) return;
   db.convidados = [];
   saveDB(db);
@@ -393,7 +633,15 @@ guestForm?.addEventListener("submit", async (e) => {
   const status = document.getElementById("gStatus").value;
   const fotoFile = document.getElementById("gFoto").files?.[0];
 
-  if (!nome || !bio) return;
+  if (nome.length < 2 || bio.length < 8) {
+    toast("Informe nome e uma bio um pouco mais completa.", "warn");
+    return;
+  }
+
+  if (insta && !insta.startsWith("@") && !isValidUrl(normalizeUrl(insta))) {
+    toast("Instagram inválido. Use @usuario ou URL completa.", "warn");
+    return;
+  }
 
   let foto = "";
   if (fotoFile) {
@@ -429,8 +677,11 @@ const episodeSearch = document.getElementById("episodeSearch");
 const episodeFilter = document.getElementById("episodeFilter");
 const episodeSort = document.getElementById("episodeSort");
 
-document.getElementById("clearEpisodesBtn")?.addEventListener("click", () => {
-  const ok = confirm("Apagar TODOS os episódios?");
+document.getElementById("clearEpisodesBtn")?.addEventListener("click", async () => {
+  const ok = await confirmAction(
+    "Apagar TODOS os episódios?",
+    "A lista de episódios será apagada."
+  );
   if (!ok) return;
   db.episodios = [];
   saveDB(db);
@@ -448,7 +699,16 @@ episodeForm?.addEventListener("submit", async (e) => {
   const obs = document.getElementById("eObs").value.trim();
   const thumbFile = document.getElementById("eThumb").files?.[0];
 
-  if (!titulo || !data) return;
+  if (titulo.length < 4 || !data) {
+    toast("Informe título e data válidos para o episódio.", "warn");
+    return;
+  }
+
+  const linkNorm = normalizeUrl(link);
+  if (linkNorm && !isValidUrl(linkNorm)) {
+    toast("O link do episódio precisa ser uma URL válida.", "warn");
+    return;
+  }
 
   let thumb = "";
   if (thumbFile) {
@@ -461,7 +721,7 @@ episodeForm?.addEventListener("submit", async (e) => {
     convidado,
     data,
     status,
-    link,
+    link: linkNorm,
     obs,
     thumb,
     createdAt: Date.now()
@@ -497,10 +757,32 @@ document.getElementById("saveBrandBtn")?.addEventListener("click", () => {
 });
 
 document.getElementById("saveSocialBtn")?.addEventListener("click", () => {
-  db.brand.social.instagram = sInstagram.value.trim();
-  db.brand.social.youtube = sYoutube.value.trim();
-  db.brand.social.spotify = sSpotify.value.trim();
-  db.brand.social.email = sEmail.value.trim();
+  const instagram = normalizeUrl(sInstagram.value);
+  const youtube = normalizeUrl(sYoutube.value);
+  const spotify = normalizeUrl(sSpotify.value);
+  const email = sEmail.value.trim();
+
+  if (instagram && !isValidUrl(instagram)) {
+    toast("Instagram inválido. Use URL completa.", "warn");
+    return;
+  }
+  if (youtube && !isValidUrl(youtube)) {
+    toast("YouTube inválido. Use URL completa.", "warn");
+    return;
+  }
+  if (spotify && !isValidUrl(spotify)) {
+    toast("Spotify inválido. Use URL completa.", "warn");
+    return;
+  }
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    toast("Email inválido.", "warn");
+    return;
+  }
+
+  db.brand.social.instagram = instagram;
+  db.brand.social.youtube = youtube;
+  db.brand.social.spotify = spotify;
+  db.brand.social.email = email;
   db.brand.social.whatsapp = sWhats.value.trim();
   saveDB(db);
   refreshAll();
@@ -673,8 +955,11 @@ function renderTransactionRow(t, compact) {
     const del = document.createElement("button");
     del.className = "btn danger smallbtn";
     del.textContent = "Excluir";
-    del.addEventListener("click", () => {
-      const ok = confirm("Excluir esta transação?");
+    del.addEventListener("click", async () => {
+      const ok = await confirmAction(
+        "Excluir esta transação?",
+        "Essa transação será removida permanentemente."
+      );
       if (!ok) return;
       db.transacoes = db.transacoes.filter((x) => x.id !== t.id);
       saveDB(db);
@@ -692,27 +977,7 @@ function renderTransactionRow(t, compact) {
 }
 
 function editTransaction(id) {
-  const t = db.transacoes.find((x) => x.id === id);
-  if (!t) return;
-
-  const tipo = prompt("Tipo (entrada/saida):", t.tipo);
-  if (!tipo) return;
-
-  const valor = Number(prompt("Valor:", String(t.valor)));
-  if (!(valor > 0)) return;
-
-  const categoria = prompt("Categoria:", t.categoria) || t.categoria;
-  const data = prompt("Data (AAAA-MM-DD):", t.data) || t.data;
-  const obs = prompt("Observação (opcional):", t.obs || "") ?? t.obs;
-
-  t.tipo = tipo === "saida" ? "saida" : "entrada";
-  t.valor = valor;
-  t.categoria = categoria.trim();
-  t.data = data.trim();
-  t.obs = String(obs || "").trim();
-
-  saveDB(db);
-  refreshAll();
+  openEditModal("transacao", id);
 }
 
 function renderGuestRow(g) {
@@ -761,8 +1026,11 @@ function renderGuestRow(g) {
   const del = document.createElement("button");
   del.className = "btn danger smallbtn";
   del.textContent = "Excluir";
-  del.addEventListener("click", () => {
-    const ok = confirm("Excluir este convidado?");
+  del.addEventListener("click", async () => {
+    const ok = await confirmAction(
+      "Excluir este convidado?",
+      "Os dados deste convidado serão removidos."
+    );
     if (!ok) return;
     db.convidados = db.convidados.filter((x) => x.id !== g.id);
     saveDB(db);
@@ -781,23 +1049,7 @@ function renderGuestRow(g) {
 }
 
 function editGuest(id) {
-  const g = db.convidados.find((x) => x.id === id);
-  if (!g) return;
-
-  const nome = prompt("Nome:", g.nome) || g.nome;
-  const insta = prompt("Instagram:", g.insta || "") ?? g.insta;
-  const bio = prompt("Bio:", g.bio) || g.bio;
-  const contato = prompt("Contato:", g.contato || "") ?? g.contato;
-  const status = prompt("Status (confirmado/pendente/recusou):", g.status) || g.status;
-
-  g.nome = nome.trim();
-  g.insta = String(insta || "").trim();
-  g.bio = bio.trim();
-  g.contato = String(contato || "").trim();
-  g.status = ["confirmado","pendente","recusou"].includes(status) ? status : g.status;
-
-  saveDB(db);
-  refreshAll();
+  openEditModal("convidado", id);
 }
 
 function renderEpisodeRow(e, compact) {
@@ -853,8 +1105,11 @@ function renderEpisodeRow(e, compact) {
     const del = document.createElement("button");
     del.className = "btn danger smallbtn";
     del.textContent = "Excluir";
-    del.addEventListener("click", () => {
-      const ok = confirm("Excluir este episódio?");
+    del.addEventListener("click", async () => {
+      const ok = await confirmAction(
+        "Excluir este episódio?",
+        "O episódio será removido da timeline e do site público."
+      );
       if (!ok) return;
       db.episodios = db.episodios.filter((x) => x.id !== e.id);
       saveDB(db);
@@ -872,26 +1127,218 @@ function renderEpisodeRow(e, compact) {
 }
 
 function editEpisode(id) {
-  const e = db.episodios.find((x) => x.id === id);
-  if (!e) return;
+  openEditModal("episodio", id);
+}
 
-  const titulo = prompt("Título:", e.titulo) || e.titulo;
-  const convidado = prompt("Convidado:", e.convidado || "") ?? e.convidado;
-  const data = prompt("Data (AAAA-MM-DD):", e.data) || e.data;
-  const status = prompt("Status (planejado/gravado/publicado):", e.status) || e.status;
-  const link = prompt("Link (opcional):", e.link || "") ?? e.link;
-  const obs = prompt("Observações:", e.obs || "") ?? e.obs;
+// =========================================================
+// ADMIN: EDIT MODAL (REPLACES PROMPTS)
+// =========================================================
+const editModal = document.getElementById("editModal");
+const editForm = document.getElementById("editForm");
+const editTitle = document.getElementById("editTitle");
+const closeEditBtn = document.getElementById("closeEditBtn");
+const cancelEditBtn = document.getElementById("cancelEditBtn");
 
-  e.titulo = titulo.trim();
-  e.convidado = String(convidado || "").trim();
-  e.data = data.trim();
-  e.status = ["planejado","gravado","publicado"].includes(status) ? status : e.status;
-  e.link = String(link || "").trim();
-  e.obs = String(obs || "").trim();
+const editInputs = {
+  tipo: document.getElementById("editTipo"),
+  valor: document.getElementById("editValor"),
+  categoria: document.getElementById("editCategoria"),
+  data: document.getElementById("editData"),
+  obs: document.getElementById("editObs"),
+  nome: document.getElementById("editNome"),
+  insta: document.getElementById("editInsta"),
+  bio: document.getElementById("editBio"),
+  contato: document.getElementById("editContato"),
+  gStatus: document.getElementById("editGStatus"),
+  titulo: document.getElementById("editTitulo"),
+  convidado: document.getElementById("editConvidado"),
+  eStatus: document.getElementById("editEStatus"),
+  link: document.getElementById("editLink")
+};
+
+const editWraps = {
+  fTipoWrap: document.getElementById("fTipoWrap"),
+  fValorWrap: document.getElementById("fValorWrap"),
+  fCategoriaWrap: document.getElementById("fCategoriaWrap"),
+  fDataWrap: document.getElementById("fDataWrap"),
+  fObsWrap: document.getElementById("fObsWrap"),
+  gNomeWrap: document.getElementById("gNomeWrap"),
+  gInstaWrap: document.getElementById("gInstaWrap"),
+  gBioWrap: document.getElementById("gBioWrap"),
+  gContatoWrap: document.getElementById("gContatoWrap"),
+  gStatusWrap: document.getElementById("gStatusWrap"),
+  eTituloWrap: document.getElementById("eTituloWrap"),
+  eConvidadoWrap: document.getElementById("eConvidadoWrap"),
+  eStatusWrap: document.getElementById("eStatusWrap"),
+  eLinkWrap: document.getElementById("eLinkWrap")
+};
+
+const editVisibleByType = {
+  transacao: ["fTipoWrap", "fValorWrap", "fCategoriaWrap", "fDataWrap", "fObsWrap"],
+  convidado: ["gNomeWrap", "gInstaWrap", "gBioWrap", "gContatoWrap", "gStatusWrap"],
+  episodio: ["eTituloWrap", "eConvidadoWrap", "fDataWrap", "eStatusWrap", "eLinkWrap", "fObsWrap"]
+};
+
+const editState = { kind: "", id: "" };
+
+function setEditFields(kind) {
+  Object.values(editWraps).forEach((el) => el?.classList.add("hidden"));
+  (editVisibleByType[kind] || []).forEach((key) => editWraps[key]?.classList.remove("hidden"));
+}
+
+function openEditModal(kind, id) {
+  editState.kind = kind;
+  editState.id = id;
+
+  if (kind === "transacao") {
+    const t = db.transacoes.find((x) => x.id === id);
+    if (!t) return;
+    editTitle.textContent = "Editar transação";
+    setEditFields("transacao");
+    editInputs.tipo.value = t.tipo || "entrada";
+    editInputs.valor.value = String(t.valor ?? "");
+    editInputs.categoria.value = t.categoria || "";
+    editInputs.data.value = t.data || "";
+    editInputs.obs.value = t.obs || "";
+  }
+
+  if (kind === "convidado") {
+    const g = db.convidados.find((x) => x.id === id);
+    if (!g) return;
+    editTitle.textContent = "Editar convidado";
+    setEditFields("convidado");
+    editInputs.nome.value = g.nome || "";
+    editInputs.insta.value = g.insta || "";
+    editInputs.bio.value = g.bio || "";
+    editInputs.contato.value = g.contato || "";
+    editInputs.gStatus.value = g.status || "confirmado";
+  }
+
+  if (kind === "episodio") {
+    const e = db.episodios.find((x) => x.id === id);
+    if (!e) return;
+    editTitle.textContent = "Editar episódio";
+    setEditFields("episodio");
+    editInputs.titulo.value = e.titulo || "";
+    editInputs.convidado.value = e.convidado || "";
+    editInputs.data.value = e.data || "";
+    editInputs.eStatus.value = e.status || "planejado";
+    editInputs.link.value = e.link || "";
+    editInputs.obs.value = e.obs || "";
+  }
+
+  editModal?.classList.remove("hidden");
+}
+
+function closeEditModal() {
+  editState.kind = "";
+  editState.id = "";
+  editModal?.classList.add("hidden");
+  editForm?.reset();
+}
+
+function saveEditModal() {
+  const { kind, id } = editState;
+  if (!kind || !id) return;
+
+  if (kind === "transacao") {
+    const t = db.transacoes.find((x) => x.id === id);
+    if (!t) return;
+
+    const valor = Number(editInputs.valor.value);
+    const categoria = editInputs.categoria.value.trim();
+    const data = editInputs.data.value.trim();
+
+    if (!(valor > 0) || categoria.length < 2 || !data) {
+      toast("Preencha tipo, valor, categoria e data válidos.", "warn");
+      return;
+    }
+
+    t.tipo = editInputs.tipo.value === "saida" ? "saida" : "entrada";
+    t.valor = valor;
+    t.categoria = categoria;
+    t.data = data;
+    t.obs = editInputs.obs.value.trim();
+  }
+
+  if (kind === "convidado") {
+    const g = db.convidados.find((x) => x.id === id);
+    if (!g) return;
+
+    const nome = editInputs.nome.value.trim();
+    const insta = editInputs.insta.value.trim();
+    const bio = editInputs.bio.value.trim();
+
+    if (nome.length < 2 || bio.length < 8) {
+      toast("Informe nome e bio válidos para o convidado.", "warn");
+      return;
+    }
+    if (insta && !insta.startsWith("@") && !isValidUrl(normalizeUrl(insta))) {
+      toast("Instagram inválido. Use @usuario ou URL completa.", "warn");
+      return;
+    }
+
+    g.nome = nome;
+    g.insta = insta;
+    g.bio = bio;
+    g.contato = editInputs.contato.value.trim();
+    g.status = ["confirmado", "pendente", "recusou"].includes(editInputs.gStatus.value)
+      ? editInputs.gStatus.value
+      : "confirmado";
+  }
+
+  if (kind === "episodio") {
+    const e = db.episodios.find((x) => x.id === id);
+    if (!e) return;
+
+    const titulo = editInputs.titulo.value.trim();
+    const data = editInputs.data.value.trim();
+    const linkNorm = normalizeUrl(editInputs.link.value);
+
+    if (titulo.length < 4 || !data) {
+      toast("Informe título e data válidos para o episódio.", "warn");
+      return;
+    }
+    if (linkNorm && !isValidUrl(linkNorm)) {
+      toast("O link do episódio precisa ser uma URL válida.", "warn");
+      return;
+    }
+
+    e.titulo = titulo;
+    e.convidado = editInputs.convidado.value.trim();
+    e.data = data;
+    e.status = ["planejado", "gravado", "publicado"].includes(editInputs.eStatus.value)
+      ? editInputs.eStatus.value
+      : "planejado";
+    e.link = linkNorm;
+    e.obs = editInputs.obs.value.trim();
+  }
 
   saveDB(db);
   refreshAll();
+  closeEditModal();
+  toast("Alterações salvas.", "ok");
 }
+
+editForm?.addEventListener("submit", (ev) => {
+  ev.preventDefault();
+  saveEditModal();
+});
+
+closeEditBtn?.addEventListener("click", closeEditModal);
+cancelEditBtn?.addEventListener("click", closeEditModal);
+editModal?.addEventListener("click", (ev) => {
+  if (ev.target === editModal) closeEditModal();
+});
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape" && editModal && !editModal.classList.contains("hidden")) {
+    closeEditModal();
+    return;
+  }
+  if (ev.key === "Escape" && confirmModal && !confirmModal.classList.contains("hidden")) {
+    closeConfirmModal(false);
+  }
+});
 
 // =========================================================
 // PUBLIC RENDER
@@ -921,27 +1368,41 @@ function renderPublic() {
     .filter(e => e.status === "publicado")
     .sort((a,b) => byDateStr(b.data, a.data))[0];
 
-  document.getElementById("pubStatLast").textContent = lastPub ? lastPub.data : "—";
+  document.getElementById("pubStatLast").textContent = lastPub ? formatDateBR(lastPub.data) : "—";
 
   // featured (last published)
   const ft = lastPub || db.episodios.sort((a,b)=>byDateStr(b.data,a.data))[0];
   const featuredTitle = document.getElementById("featuredTitle");
   const featuredMeta = document.getElementById("featuredMeta");
   const featuredLink = document.getElementById("featuredLink");
+  const featuredEmbed = document.getElementById("featuredEmbed");
 
   if (ft) {
     featuredTitle.textContent = ft.titulo;
-    featuredMeta.textContent = `${ft.data}${ft.convidado ? " • " + ft.convidado : ""}`;
+    featuredMeta.textContent = `${formatDateBR(ft.data)}${ft.convidado ? " • " + ft.convidado : ""}`;
     if (ft.link) {
       featuredLink.href = ft.link;
       featuredLink.classList.remove("hidden");
     } else {
       featuredLink.href = "#episodios";
     }
+
+    const embedUrl = getEmbeddableLink(ft.link);
+    if (featuredEmbed && embedUrl) {
+      featuredEmbed.innerHTML = `<iframe src="${embedUrl}" title="Episódio em destaque" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>`;
+      featuredEmbed.classList.remove("hidden");
+    } else if (featuredEmbed) {
+      featuredEmbed.innerHTML = "";
+      featuredEmbed.classList.add("hidden");
+    }
   } else {
     featuredTitle.textContent = "Episódio em destaque";
     featuredMeta.textContent = "Cadastre episódios no painel para aparecer aqui.";
     featuredLink.href = "#episodios";
+    if (featuredEmbed) {
+      featuredEmbed.innerHTML = "";
+      featuredEmbed.classList.add("hidden");
+    }
   }
 
   // episodes public list
@@ -996,6 +1457,7 @@ function renderPublic() {
 
   // social/contact
   renderPublicSocial();
+  updateDynamicUI();
 }
 
 function renderPublicEpisodeCard(e) {
@@ -1005,7 +1467,7 @@ function renderPublicEpisodeCard(e) {
   const thumb = document.createElement("div");
   thumb.className = "thumb";
   if (e.thumb) {
-    thumb.innerHTML = `<img src="${e.thumb}" alt="thumbnail"/>`;
+    thumb.innerHTML = `<img src="${e.thumb}" alt="Capa do episódio ${safeText(e.titulo)}" loading="lazy" decoding="async"/>`;
   } else {
     thumb.innerHTML = `<div class="ph">EP</div>`;
   }
@@ -1056,7 +1518,7 @@ function renderPublicGuestCard(g) {
   const thumb = document.createElement("div");
   thumb.className = "thumb";
   if (g.foto) {
-    thumb.innerHTML = `<img src="${g.foto}" alt="foto"/>`;
+    thumb.innerHTML = `<img src="${g.foto}" alt="Foto de ${safeText(g.nome)}" loading="lazy" decoding="async"/>`;
   } else {
     thumb.innerHTML = `<div class="ph">GUEST</div>`;
   }
@@ -1421,6 +1883,167 @@ function renderCharts() {
 }
 
 // =========================================================
+// DYNAMIC UI FX (PUBLIC)
+// =========================================================
+let fxInited = false;
+let revealObserver = null;
+let activePublicNavLinks = [];
+let activePublicSections = [];
+
+function initDynamicFX() {
+  if (fxInited) return;
+  fxInited = true;
+  setupScrollProgress();
+  setupBackToTop();
+  setupActivePublicNav();
+  setupRevealObserver();
+  setupHeroTilt();
+  updateDynamicUI();
+}
+
+function updateDynamicUI() {
+  updateScrollProgress();
+  updateBackToTop();
+  updateActivePublicNav();
+  applyRevealTargets();
+  animatePublicStats();
+}
+
+function prefersReducedMotion() {
+  return window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function setupScrollProgress() {
+  window.addEventListener("scroll", updateScrollProgress, { passive: true });
+  window.addEventListener("resize", updateScrollProgress);
+}
+
+function updateScrollProgress() {
+  const bar = document.getElementById("scrollProgress");
+  if (!bar) return;
+  const h = document.documentElement;
+  const max = h.scrollHeight - h.clientHeight;
+  const p = max > 0 ? (h.scrollTop / max) * 100 : 0;
+  bar.style.width = `${Math.min(100, Math.max(0, p))}%`;
+}
+
+function setupBackToTop() {
+  const btn = document.getElementById("backTopBtn");
+  if (!btn) return;
+  btn.addEventListener("click", () => {
+    window.scrollTo({ top: 0, behavior: prefersReducedMotion() ? "auto" : "smooth" });
+  });
+  window.addEventListener("scroll", updateBackToTop, { passive: true });
+}
+
+function updateBackToTop() {
+  const btn = document.getElementById("backTopBtn");
+  if (!btn) return;
+  btn.classList.toggle("show", window.scrollY > 360);
+}
+
+function setupActivePublicNav() {
+  activePublicNavLinks = Array.from(document.querySelectorAll(".public-nav .navlink"));
+  activePublicSections = activePublicNavLinks
+    .map((a) => document.querySelector(a.getAttribute("href")))
+    .filter(Boolean);
+
+  window.addEventListener("scroll", updateActivePublicNav, { passive: true });
+  window.addEventListener("resize", updateActivePublicNav);
+  window.addEventListener("hashchange", updateActivePublicNav);
+}
+
+function updateActivePublicNav() {
+  if (!activePublicNavLinks.length || !activePublicSections.length) return;
+
+  const offset = window.scrollY + 120;
+  let currentId = activePublicSections[0].id;
+  activePublicSections.forEach((section) => {
+    if (section.offsetTop <= offset) currentId = section.id;
+  });
+
+  activePublicNavLinks.forEach((link) => {
+    const id = (link.getAttribute("href") || "").replace("#", "");
+    link.classList.toggle("active", id === currentId);
+  });
+}
+
+function setupRevealObserver() {
+  if (!("IntersectionObserver" in window) || prefersReducedMotion()) return;
+  revealObserver = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      if (!entry.isIntersecting) return;
+      entry.target.classList.add("in");
+      revealObserver.unobserve(entry.target);
+    });
+  }, { threshold: 0.12 });
+}
+
+function applyRevealTargets() {
+  const targets = Array.from(document.querySelectorAll(
+    ".hero-left, .hero-right, .public-section, .carditem, .statbox, .hero-card"
+  ));
+  targets.forEach((el) => {
+    if (!el.classList.contains("reveal")) el.classList.add("reveal");
+    if (prefersReducedMotion()) {
+      el.classList.add("in");
+      return;
+    }
+    if (revealObserver) revealObserver.observe(el);
+    else el.classList.add("in");
+  });
+}
+
+function setupHeroTilt() {
+  if (prefersReducedMotion()) return;
+  const card = document.querySelector(".hero-card");
+  if (!card || card.dataset.fxTilt === "1") return;
+  card.dataset.fxTilt = "1";
+
+  card.addEventListener("mousemove", (e) => {
+    const r = card.getBoundingClientRect();
+    const x = (e.clientX - r.left) / r.width;
+    const y = (e.clientY - r.top) / r.height;
+    const rx = (0.5 - y) * 4;
+    const ry = (x - 0.5) * 5;
+    card.style.transform = `perspective(900px) rotateX(${rx.toFixed(2)}deg) rotateY(${ry.toFixed(2)}deg)`;
+  });
+
+  card.addEventListener("mouseleave", () => {
+    card.style.transform = "perspective(900px) rotateX(0deg) rotateY(0deg)";
+  });
+}
+
+function animatePublicStats() {
+  if (prefersReducedMotion()) return;
+  ["pubStatEps", "pubStatGuests"].forEach((id) => animateNumber(id));
+}
+
+function animateNumber(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+
+  const target = Number(el.textContent) || 0;
+  const last = Number(el.dataset.animatedValue || "0");
+  if (target === last) return;
+
+  const start = last;
+  const startAt = performance.now();
+  const duration = 480;
+
+  const tick = (now) => {
+    const t = Math.min(1, (now - startAt) / duration);
+    const eased = 1 - Math.pow(1 - t, 3);
+    const val = Math.round(start + (target - start) * eased);
+    el.textContent = String(val);
+    if (t < 1) requestAnimationFrame(tick);
+    else el.dataset.animatedValue = String(target);
+  };
+
+  requestAnimationFrame(tick);
+}
+
+// =========================================================
 // DEFAULTS + INIT
 // =========================================================
 function setTodayDefaults() {
@@ -1441,6 +2064,49 @@ function fillSettingsInputs() {
   sSpotify.value = db.brand.social.spotify || "";
   sEmail.value = db.brand.social.email || "";
   sWhats.value = db.brand.social.whatsapp || "";
+  updateBackupInfo();
+}
+
+function updateBackupInfo() {
+  if (!backupInfo || !backupHistory) return;
+  const list = getBackupList();
+  const backup = list[0] || getBackupPayload();
+  if (!backup?.savedAt) {
+    backupInfo.textContent = "Backup local: ainda não disponível.";
+    backupHistory.innerHTML = "";
+    return;
+  }
+
+  const date = new Date(backup.savedAt);
+  const when = Number.isNaN(date.getTime())
+    ? backup.savedAt
+    : date.toLocaleString("pt-BR");
+  const label = backup.label ? ` • ${backup.label}` : "";
+  backupInfo.textContent = `Último backup local: ${when}${label} • Histórico: ${list.length}/${MAX_BACKUPS}`;
+
+  backupHistory.innerHTML = "";
+  list.forEach((item, idx) => {
+    const d = new Date(item.savedAt || "");
+    const whenItem = Number.isNaN(d.getTime()) ? String(item.savedAt || "—") : d.toLocaleString("pt-BR");
+    const row = document.createElement("div");
+    row.className = "backup-item";
+    row.innerHTML = `
+      <div class="small muted">${safeText(whenItem)}${item.label ? " • " + safeText(item.label) : ""}</div>
+      <button class="btn ghost smallbtn" type="button" data-backup-idx="${idx}">Restaurar</button>
+    `;
+    backupHistory.appendChild(row);
+  });
+}
+
+function ensureBackupInitialized() {
+  if (getBackupList().length > 0 || getBackupPayload()) return;
+  try {
+    const payload = createPayload(db, "bootstrap");
+    localStorage.setItem(DB_BACKUP_KEY, JSON.stringify(payload));
+    saveBackupList([payload]);
+  } catch {
+    // If storage is full, we just keep running without bootstrap backup.
+  }
 }
 
 function refreshAll() {
@@ -1462,6 +2128,8 @@ function initAdmin() {
 
 (function boot() {
   document.getElementById("year").textContent = String(new Date().getFullYear());
+  ensureBackupInitialized();
+  initDynamicFX();
 
   if (isLogged()) {
     showAdmin();

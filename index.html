@@ -3,10 +3,33 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Pubpodcast • Site +</title>
+  <title>Pubpodcast • Podcast Oficial</title>
+  <meta name="description" content="Site oficial do Pubpodcast com episódios, convidados, novidades e contato." />
+  <meta name="theme-color" content="#0b0c10" />
+  <meta name="robots" content="index,follow" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Pubpodcast • Podcast Oficial" />
+  <meta property="og:description" content="Acompanhe episódios, convidados e novidades do Pubpodcast." />
+  <meta property="og:locale" content="pt_BR" />
+  <meta property="og:image" content="./favicon.svg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Pubpodcast • Podcast Oficial" />
+  <meta name="twitter:description" content="Acompanhe episódios, convidados e novidades do Pubpodcast." />
+  <meta name="twitter:image" content="./favicon.svg" />
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "PodcastSeries",
+    "name": "Pubpodcast",
+    "description": "Podcast com episódios, convidados e novidades.",
+    "inLanguage": "pt-BR"
+  }
+  </script>
   <link rel="stylesheet" href="./style.css"/>
 </head>
 <body>
+  <div id="scrollProgress" aria-hidden="true"></div>
 
   <!-- Animated background -->
   <div class="bg-orb orb-1"></div>
@@ -32,7 +55,11 @@
         <a href="#episodios" class="navlink">Episódios</a>
         <a href="#convidados" class="navlink">Convidados</a>
         <a href="#contato" class="navlink">Contato</a>
-        <button id="openLoginBtn" class="btn ghost smallbtn">Painel</button>
+        <button id="openLoginBtn" class="btn ghost smallbtn hover-split-btn" style="--content: 'Entrar no painel';">
+          <div class="left"></div>
+          Entrar no painel
+          <div class="right"></div>
+        </button>
       </nav>
     </header>
 
@@ -41,10 +68,10 @@
         <div class="hero-left">
           <div class="hero-kicker">🎙️ Podcast</div>
           <h1 class="hero-title">
-            Fiquem atualizados (a).
+            Fique por dentro de cada episódio.
           </h1>
           <p class="hero-sub">
-            Um site de familia do pubpodcast ,para você aconpanhar de pertinho as atualizações 
+            O site oficial da família Pubpodcast para você acompanhar novidades, episódios e convidados.
           </p>
 
           <div class="hero-actions">
@@ -76,6 +103,7 @@
             </div>
             <div class="hero-card-title" id="featuredTitle">Episódio em destaque</div>
             <div class="hero-card-meta" id="featuredMeta">—</div>
+            <div id="featuredEmbed" class="featured-embed hidden" aria-hidden="true"></div>
             <div class="hero-card-actions">
               <a class="btn ghost" id="featuredLink" href="#" target="_blank" rel="noopener">Abrir</a>
               <a class="btn primary" href="#episodios">Ver todos</a>
@@ -150,7 +178,7 @@
       </section>
 
       <footer class="public-footer">
-        <span>© <span id="year"></span> <span id="podName2">Seu Podcast</span> • Tema escuro </span>
+        <span>© <span id="year"></span> <span id="podName2">Seu Podcast</span> • Todos os direitos reservados</span>
       </footer>
     </main>
   </section>
@@ -224,8 +252,133 @@
     </div>
   </div>
 
+  <!-- ADMIN EDIT MODAL -->
+  <div id="editModal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div>
+          <strong id="editTitle" style="font-size:16px;">Editar</strong>
+          <div id="editMeta" class="muted small" style="margin-top:4px;">Atualize os dados abaixo.</div>
+        </div>
+        <button id="closeEditBtn" class="icon-btn" type="button" aria-label="Fechar edição">✕</button>
+      </div>
+
+      <div class="divider"></div>
+
+      <form id="editForm" class="form">
+        <div class="edit-grid">
+          <label id="fTipoWrap">
+            Tipo
+            <select id="editTipo">
+              <option value="entrada">Entrada</option>
+              <option value="saida">Saída</option>
+            </select>
+          </label>
+
+          <label id="fValorWrap">
+            Valor (R$)
+            <input id="editValor" type="number" step="0.01" min="0" />
+          </label>
+
+          <label id="fCategoriaWrap" class="span-2">
+            Categoria
+            <input id="editCategoria" type="text" />
+          </label>
+
+          <label id="fDataWrap">
+            Data
+            <input id="editData" type="date" />
+          </label>
+
+          <label id="fObsWrap" class="span-2">
+            Observação
+            <input id="editObs" type="text" />
+          </label>
+
+          <label id="gNomeWrap">
+            Nome
+            <input id="editNome" type="text" />
+          </label>
+
+          <label id="gInstaWrap">
+            Instagram
+            <input id="editInsta" type="text" />
+          </label>
+
+          <label id="gBioWrap" class="span-2">
+            Bio
+            <input id="editBio" type="text" />
+          </label>
+
+          <label id="gContatoWrap">
+            Contato
+            <input id="editContato" type="text" />
+          </label>
+
+          <label id="gStatusWrap">
+            Status
+            <select id="editGStatus">
+              <option value="confirmado">Confirmado</option>
+              <option value="pendente">Pendente</option>
+              <option value="recusou">Recusou</option>
+            </select>
+          </label>
+
+          <label id="eTituloWrap" class="span-2">
+            Título
+            <input id="editTitulo" type="text" />
+          </label>
+
+          <label id="eConvidadoWrap">
+            Convidado
+            <input id="editConvidado" type="text" />
+          </label>
+
+          <label id="eStatusWrap">
+            Status
+            <select id="editEStatus">
+              <option value="planejado">Planejado</option>
+              <option value="gravado">Gravado</option>
+              <option value="publicado">Publicado</option>
+            </select>
+          </label>
+
+          <label id="eLinkWrap" class="span-2">
+            Link do episódio
+            <input id="editLink" type="url" placeholder="https://..." />
+          </label>
+        </div>
+
+        <div class="actions">
+          <button class="btn primary" id="saveEditBtn" type="submit">Salvar alterações</button>
+          <button class="btn ghost" id="cancelEditBtn" type="button">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- TOAST -->
   <div id="toast" class="toast hidden"></div>
+
+  <!-- CONFIRM MODAL -->
+  <div id="confirmModal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div>
+          <strong style="font-size:16px;">Confirmação</strong>
+          <div id="confirmDetail" class="muted small" style="margin-top:4px;">Revise esta ação antes de continuar.</div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+      <p id="confirmMessage" style="margin:0 0 10px; line-height:1.55;">Tem certeza?</p>
+
+      <div class="actions">
+        <button id="confirmCancelBtn" class="btn ghost" type="button">Cancelar</button>
+        <button id="confirmOkBtn" class="btn danger" type="button">Confirmar</button>
+      </div>
+    </div>
+  </div>
 
 
   <!-- DASHBOARD (ADMIN) -->
@@ -708,7 +861,11 @@
                 <h3>📦 Backup</h3>
                 <p class="muted">Seus dados ficam salvos no navegador (LocalStorage).</p>
                 <button class="btn ghost" id="importBtn">Importar JSON</button>
+                <button class="btn ghost" id="restoreBackupBtn">Restaurar último backup</button>
+                <button class="btn ghost" id="clearBackupHistoryBtn">Limpar histórico de backups</button>
                 <input type="file" id="importFile" accept="application/json" hidden />
+                <p id="backupInfo" class="small muted">Backup local: carregando...</p>
+                <div id="backupHistory" class="list"></div>
                 <p class="small muted">
                   Use também o botão "Exportar JSON" no topo.
                 </p>
@@ -741,5 +898,6 @@
   </section>
 
   <script src="./script.js"></script>
+  <button id="backTopBtn" class="back-top-btn" aria-label="Voltar ao topo">↑</button>
 </body>
 </html>
